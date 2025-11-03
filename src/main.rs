@@ -21,8 +21,6 @@ fn main() {
 
     let mut char_ligthness: Vec<u32> = vec![0; (nb_columns * nb_lines) as usize];
 
-    println!("ok");
-
     for (x, y, px) in buf.enumerate_pixels() {
         if x >= FONT_SIZE_WIDTH as u32 * nb_columns || y >= FONT_SIZE_HEIGHT as u32 * nb_lines {
             continue;
@@ -39,9 +37,6 @@ fn main() {
 
         char_ligthness[char_x + (char_y * nb_columns as usize)] += lightness as u32;
     }
-
-
-    println!("ok2");
 
     for (x, y, _px) in buf.enumerate_pixels() {
         if x >= FONT_SIZE_WIDTH as u32 * nb_columns || y >= FONT_SIZE_HEIGHT as u32 * nb_lines {
