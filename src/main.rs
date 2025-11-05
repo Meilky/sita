@@ -1,6 +1,7 @@
 mod chars;
 
 use image::{ImageReader, Rgb, RgbImage};
+use std::{env, path::Path};
 
 use crate::chars::{FONT_SIZE_HEIGHT, FONT_SIZE_WIDTH, FONT8X8};
 
@@ -34,15 +35,44 @@ fn gradient_to_char_idx(gradient: u8) -> usize {
     chars_idx[idx]
 }
 
+struct Args {
+    pub input_file_path: String,
+    pub output_file_path: String,
+}
+
+fn parse_args() -> Args {
+    let args: Vec<String> = env::args().collect();
+
+    if args.len() == 1 {
+        panic!("You need to provide a path to the input file!");
+    }
+
+    if args.len() == 2 {
+        panic!("You need to provide a path to the output file!");
+    }
+
+    let input_file_path = args[1].clone();
+    let output_file_path = args[2].clone();
+
+    if Path::new(&input_file_path).exists() == false {
+        panic!("The input file must exists!");
+    }
+
+    Args {
+        input_file_path,
+        output_file_path,
+    }
+}
+
 fn main() {
     let scale: u8 = 1;
 
-    let img = ImageReader::open("ugandan_knuckles.jpg")
+    let args = parse_args();
+
+    let img = ImageReader::open(args.input_file_path)
         .unwrap()
         .decode()
         .unwrap();
-
-    let _space_char = chars::FONT8X8[0];
 
     let rgb8_img = img.as_rgb8();
 
@@ -128,5 +158,5 @@ fn main() {
         }
     }
 
-    img.save("ascii.png").unwrap();
+    img.save(args.output_file_path + ".png").unwrap();
 }
