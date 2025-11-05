@@ -2,7 +2,7 @@ mod chars;
 
 use image::{ImageReader, Rgb, RgbImage};
 
-use crate::chars::{FONT_SIZE_HEIGHT, FONT_SIZE_WIDTH};
+use crate::chars::{FONT_SIZE_HEIGHT, FONT_SIZE_WIDTH, FONT8X8};
 
 fn is_point_out_of_bound(
     scale: u8,
@@ -26,6 +26,14 @@ fn get_char_x_y(scale: u8, font_height: u8, font_width: u8, x: u32, y: u32) -> (
     (char_x, char_y)
 }
 
+fn gradient_to_char_idx(gradient: u8) -> usize {
+    let chars_idx: [usize; 10] = [0, 14, 26, 13, 29, 11, 10, 3, 5, 32];
+    let steps = chars_idx.len();
+
+    let idx = (gradient as usize * steps) / 256;
+    chars_idx[idx]
+}
+
 fn main() {
     let scale: u8 = 1;
 
@@ -39,7 +47,9 @@ fn main() {
     let rgb8_img = img.as_rgb8();
 
     if rgb8_img.is_none() {
-        panic!("sry bro, can't read that image for some reason, maybe cause it has a alpha layer or some shit, idk");
+        panic!(
+            "sry bro, can't read that image for some reason, maybe cause it has a alpha layer or some shit, idk"
+        );
     }
 
     let buf = rgb8_img.unwrap();
@@ -100,7 +110,22 @@ fn main() {
         )
         .unwrap();
 
-        img.put_pixel(x, y, Rgb([gradient, gradient, gradient]));
+        let char: [u8; 8] = FONT8X8[gradient_to_char_idx(gradient)];
+
+        let char_px_x = x % FONT_SIZE_WIDTH as u32;
+        let char_px_y = y % FONT_SIZE_HEIGHT as u32;
+
+        let mask: u8 = 1 << char_px_x as u8;
+
+        let result: u8 = char[char_px_y as usize] & mask;
+
+        let has_px: bool = result > 0;
+
+        if has_px {
+            img.put_pixel(x, y, Rgb([gradient, gradient, gradient]));
+        } else {
+            img.put_pixel(x, y, Rgb([0, 0, 0]));
+        }
     }
 
     img.save("ascii.png").unwrap();
