@@ -5,4 +5,4 @@
 
 [Another Inspiration video](https://www.youtube.com/watch?v=gg40RWiaHRY)
 
-[(8x8 Font Inspiration](https://github.com/dhepper/font8x8/tree/master)
+[8x8 Font Inspiration](https://github.com/dhepper/font8x8/tree/master)
