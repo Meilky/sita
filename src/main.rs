@@ -80,7 +80,8 @@ fn main() {
 
     if rgb8_img.is_none() {
         panic!(
-            "sry bro, can't read that image for some reason, maybe cause it has a alpha layer or some shit, idk");
+            "sry bro, can't read that image for some reason, maybe cause it has a alpha layer or some shit, idk"
+        );
     }
 
     let buf = rgb8_img.unwrap();
@@ -137,7 +138,10 @@ fn main() {
         let c = char_ligthness[char_x + (char_y * nb_columns as usize)];
 
         let gradient: u8 = u8::try_from(
-            c / (FONT_SIZE_WIDTH as u32 * args.scale as u32 * FONT_SIZE_HEIGHT as u32 * args.scale as u32),
+            c / (FONT_SIZE_WIDTH as u32
+                * args.scale as u32
+                * FONT_SIZE_HEIGHT as u32
+                * args.scale as u32),
         )
         .unwrap();
 
