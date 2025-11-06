@@ -98,3 +98,94 @@ pub const FONT8X8: [[u8; 8]; 95] = [
     [0x07, 0x0C, 0x0C, 0x38, 0x0C, 0x0C, 0x07, 0x00], // U+007D (})
     [0x6E, 0x3B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], // U+007E (~)
 ];
+
+pub fn print_char(char_idx: usize) {
+    let char = FONT8X8[char_idx];
+
+    for line in char {
+        for i in 0..7 {
+            print!("{}", if (line & 1 << i) > 0 { "1" } else { "0" });
+        }
+
+        println!("{}", if (line & 1 << 7) > 0 { "1" } else { "0" });
+    }
+}
+
+pub fn has_px_at(x: u32, y: u32, scale: u8, char_idx: usize) -> bool {
+    let char = FONT8X8[char_idx];
+
+    let char_px_x = x % (FONT_SIZE_WIDTH as u32 * scale as u32);
+    let char_px_y = y % (FONT_SIZE_HEIGHT as u32 * scale as u32);
+
+    let char_px_x_descaled = (char_px_x / scale as u32) as u8;
+    let char_px_y_descaled = (char_px_y / scale as u32) as u8;
+
+    let mask: u8 = 1 << char_px_x_descaled;
+
+    let result: u8 = char[char_px_y_descaled as usize] & mask;
+
+    result > 0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_works_at_scale_1_for_plus_sign_middle_line() {
+        let px_0_3 = has_px_at(16, 3, 1, 11);
+        let px_1_3 = has_px_at(17, 3, 1, 11);
+        let px_2_3 = has_px_at(18, 3, 1, 11);
+        let px_3_3 = has_px_at(19, 3, 1, 11);
+        let px_4_3 = has_px_at(20, 3, 1, 11);
+        let px_5_3 = has_px_at(21, 3, 1, 11);
+        let px_6_3 = has_px_at(22, 3, 1, 11);
+        let px_7_3 = has_px_at(23, 3, 1, 11);
+
+        assert_eq!(px_0_3, true);
+        assert_eq!(px_1_3, true);
+        assert_eq!(px_2_3, true);
+        assert_eq!(px_3_3, true);
+        assert_eq!(px_4_3, true);
+        assert_eq!(px_5_3, true);
+        assert_eq!(px_6_3, false);
+        assert_eq!(px_7_3, false);
+    }
+
+    #[test]
+    fn it_works_at_scale_2_for_plus_sign_middle_line() {
+        let px_0_6 = has_px_at(16, 6, 2, 11);
+        let px_1_6 = has_px_at(17, 6, 2, 11);
+        let px_2_6 = has_px_at(18, 6, 2, 11);
+        let px_3_6 = has_px_at(19, 6, 2, 11);
+        let px_4_6 = has_px_at(20, 6, 2, 11);
+        let px_5_6 = has_px_at(21, 6, 2, 11);
+        let px_6_6 = has_px_at(22, 6, 2, 11);
+        let px_7_6 = has_px_at(23, 6, 2, 11);
+        let px_8_6 = has_px_at(24, 6, 2, 11);
+        let px_9_6 = has_px_at(25, 6, 2, 11);
+        let px_10_6 = has_px_at(26, 6, 2, 11);
+        let px_11_6 = has_px_at(27, 6, 2, 11);
+        let px_12_6 = has_px_at(28, 6, 2, 11);
+        let px_13_6 = has_px_at(29, 6, 2, 11);
+        let px_14_6 = has_px_at(30, 6, 2, 11);
+        let px_15_6 = has_px_at(31, 6, 2, 11);
+
+        assert_eq!(px_0_6, true);
+        assert_eq!(px_1_6, true);
+        assert_eq!(px_2_6, true);
+        assert_eq!(px_3_6, true);
+        assert_eq!(px_4_6, true);
+        assert_eq!(px_5_6, true);
+        assert_eq!(px_6_6, true);
+        assert_eq!(px_7_6, true);
+        assert_eq!(px_8_6, true);
+        assert_eq!(px_9_6, true);
+        assert_eq!(px_10_6, true);
+        assert_eq!(px_11_6, true);
+        assert_eq!(px_12_6, false);
+        assert_eq!(px_13_6, false);
+        assert_eq!(px_14_6, false);
+        assert_eq!(px_15_6, false);
+    }
+}

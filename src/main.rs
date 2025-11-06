@@ -3,7 +3,7 @@ mod chars;
 use image::{ImageReader, Rgb, RgbImage};
 use std::{env, path::Path};
 
-use crate::chars::{FONT_SIZE_HEIGHT, FONT_SIZE_WIDTH, FONT8X8};
+use crate::chars::{FONT_SIZE_HEIGHT, FONT_SIZE_WIDTH, has_px_at};
 
 fn is_point_out_of_bound(
     scale: u8,
@@ -36,12 +36,15 @@ fn gradient_to_char_idx(gradient: u8) -> usize {
 }
 
 struct Args {
+    pub scale: u8,
     pub input_file_path: String,
     pub output_file_path: String,
 }
 
 fn parse_args() -> Args {
     let args: Vec<String> = env::args().collect();
+
+    let scale: u8 = 1;
 
     if args.len() == 1 {
         panic!("You need to provide a path to the input file!");
@@ -59,14 +62,13 @@ fn parse_args() -> Args {
     }
 
     Args {
+        scale,
         input_file_path,
         output_file_path,
     }
 }
 
 fn main() {
-    let scale: u8 = 1;
-
     let args = parse_args();
 
     let img = ImageReader::open(args.input_file_path)
@@ -78,8 +80,7 @@ fn main() {
 
     if rgb8_img.is_none() {
         panic!(
-            "sry bro, can't read that image for some reason, maybe cause it has a alpha layer or some shit, idk"
-        );
+            "sry bro, can't read that image for some reason, maybe cause it has a alpha layer or some shit, idk");
     }
 
     let buf = rgb8_img.unwrap();
@@ -87,8 +88,8 @@ fn main() {
     let width = img.width();
     let height = img.height();
 
-    let nb_columns: u32 = width / (FONT_SIZE_WIDTH as u32 * scale as u32);
-    let nb_lines: u32 = height / (FONT_SIZE_HEIGHT as u32 * scale as u32);
+    let nb_columns: u32 = width / (FONT_SIZE_WIDTH as u32 * args.scale as u32);
+    let nb_lines: u32 = height / (FONT_SIZE_HEIGHT as u32 * args.scale as u32);
 
     let mut img = RgbImage::new(width, height);
 
@@ -96,7 +97,7 @@ fn main() {
 
     for (x, y, px) in buf.enumerate_pixels() {
         if is_point_out_of_bound(
-            scale,
+            args.scale,
             FONT_SIZE_HEIGHT,
             FONT_SIZE_WIDTH,
             nb_columns,
@@ -107,7 +108,7 @@ fn main() {
             continue;
         }
 
-        let (char_x, char_y) = get_char_x_y(scale, FONT_SIZE_HEIGHT, FONT_SIZE_WIDTH, x, y);
+        let (char_x, char_y) = get_char_x_y(args.scale, FONT_SIZE_HEIGHT, FONT_SIZE_WIDTH, x, y);
 
         let min: u8 = px.0.iter().take(3).min().unwrap_or(&0).clone();
         let max: u8 = px.0.iter().take(3).max().unwrap_or(&0).clone();
@@ -119,7 +120,7 @@ fn main() {
 
     for (x, y, _px) in buf.enumerate_pixels() {
         if is_point_out_of_bound(
-            scale,
+            args.scale,
             FONT_SIZE_HEIGHT,
             FONT_SIZE_WIDTH,
             nb_columns,
@@ -131,25 +132,16 @@ fn main() {
             continue;
         }
 
-        let (char_x, char_y) = get_char_x_y(scale, FONT_SIZE_HEIGHT, FONT_SIZE_WIDTH, x, y);
+        let (char_x, char_y) = get_char_x_y(args.scale, FONT_SIZE_HEIGHT, FONT_SIZE_WIDTH, x, y);
 
         let c = char_ligthness[char_x + (char_y * nb_columns as usize)];
 
         let gradient: u8 = u8::try_from(
-            c / (FONT_SIZE_WIDTH as u32 * scale as u32 * FONT_SIZE_HEIGHT as u32 * scale as u32),
+            c / (FONT_SIZE_WIDTH as u32 * args.scale as u32 * FONT_SIZE_HEIGHT as u32 * args.scale as u32),
         )
         .unwrap();
 
-        let char: [u8; 8] = FONT8X8[gradient_to_char_idx(gradient)];
-
-        let char_px_x = x % FONT_SIZE_WIDTH as u32;
-        let char_px_y = y % FONT_SIZE_HEIGHT as u32;
-
-        let mask: u8 = 1 << char_px_x as u8;
-
-        let result: u8 = char[char_px_y as usize] & mask;
-
-        let has_px: bool = result > 0;
+        let has_px: bool = has_px_at(x, y, args.scale, gradient_to_char_idx(gradient));
 
         if has_px {
             img.put_pixel(x, y, Rgb([gradient, gradient, gradient]));
