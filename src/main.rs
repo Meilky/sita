@@ -4,7 +4,7 @@ mod px;
 
 use image::{ImageReader, Rgb, RgbImage};
 
-use crate::chars::{FONT_SIZE_HEIGHT, FONT_SIZE_WIDTH, has_px_at};
+use crate::chars::{FONT_SIZE_HEIGHT, FONT_SIZE_WIDTH, FONT8X8, has_px_at};
 use crate::input::Args;
 use crate::px::Px;
 
@@ -71,21 +71,51 @@ fn main() {
         char_px[char_x + (char_y * nb_columns as usize)].add_px(px.0[0], px.0[1], px.0[2]);
     }
 
-    let img = RgbImage::from_fn(width, height, |x, y| {
+    let mut char_px_x: u32 = 0;
+    let mut char_px_y: u32 = 0;
+
+    let mut img = RgbImage::new(width, height);
+
+    let mut old_y: u32 = 0;
+
+    for (x, y, _px) in buf.enumerate_pixels() {
+        if char_px_x == scaled_font_width {
+            char_px_x = 0;
+        }
+
+        if old_y != y {
+            char_px_x = 0;
+            old_y = y;
+            char_px_y += 1;
+
+            if char_px_y == scaled_font_height {
+                char_px_y = 0;
+            }
+        }
+
         let (char_x, char_y) = get_char_x_y(scaled_font_height, scaled_font_width, x, y);
 
         let c = &char_px[char_x + (char_y * nb_columns as usize)];
 
         let lightness = c.get_ligthness();
 
-        let has_px: bool = has_px_at(x, y, args.scale, gradient_to_char_idx(lightness));
+        let char = FONT8X8[gradient_to_char_idx(lightness)];
 
-        if has_px {
-            Rgb([lightness, lightness, lightness])
+        let char_px_x_descaled = (char_px_x / args.scale as u32) as u8;
+        let char_px_y_descaled = (char_px_y / args.scale as u32) as u8;
+
+        let mask: u8 = 1 << char_px_x_descaled;
+
+        let result: u8 = char[char_px_y_descaled as usize] & mask;
+
+        if result > 0 {
+            img.put_pixel(x, y, Rgb([lightness, lightness, lightness]));
         } else {
-            Rgb([0, 0, 0])
+            img.put_pixel(x, y, Rgb([0, 0, 0]));
         }
-    });
+
+        char_px_x += 1;
+    }
 
     img.save(args.output_file_path + ".png").unwrap();
 }
