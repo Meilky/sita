@@ -4,8 +4,8 @@ mod px;
 
 use image::{ImageReader, Rgb, RgbImage};
 
-use crate::chars::{FONT_SIZE_HEIGHT, FONT_SIZE_WIDTH, FONT8X8, has_px_at};
-use crate::input::Args;
+use crate::chars::{FONT_SIZE_HEIGHT, FONT_SIZE_WIDTH, FONT8X8};
+use crate::input::{Args, ColorType};
 use crate::px::Px;
 
 fn get_char_x_y(scaled_font_height: u32, scaled_font_width: u32, x: u32, y: u32) -> (usize, usize) {
@@ -109,7 +109,10 @@ fn main() {
         let result: u8 = char[char_px_y_descaled as usize] & mask;
 
         if result > 0 {
-            img.put_pixel(x, y, Rgb([c.avg_r(), c.avg_g(), c.avg_b()]));
+            match args.color_type {
+                ColorType::COLOR => img.put_pixel(x, y, Rgb([c.avg_r(), c.avg_g(), c.avg_b()])),
+                ColorType::MONOCHROME => img.put_pixel(x, y, Rgb([lightness, lightness, lightness])),
+            };
         } else {
             img.put_pixel(x, y, Rgb([0, 0, 0]));
         }
