@@ -44,4 +44,16 @@ impl Px {
 
         ((max + min) / (self.px_sum * 2)) as u8
     }
+
+    pub fn avg_r(&self) -> u8 {
+        (self.r_sum / self.px_sum) as u8
+    }
+
+    pub fn avg_g(&self) -> u8 {
+        (self.g_sum / self.px_sum) as u8
+    }
+
+    pub fn avg_b(&self) -> u8 {
+        (self.b_sum / self.px_sum) as u8
+    }
 }

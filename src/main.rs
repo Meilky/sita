@@ -109,7 +109,7 @@ fn main() {
         let result: u8 = char[char_px_y_descaled as usize] & mask;
 
         if result > 0 {
-            img.put_pixel(x, y, Rgb([lightness, lightness, lightness]));
+            img.put_pixel(x, y, Rgb([c.avg_r(), c.avg_g(), c.avg_b()]));
         } else {
             img.put_pixel(x, y, Rgb([0, 0, 0]));
         }
