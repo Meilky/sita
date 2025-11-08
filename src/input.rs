@@ -10,7 +10,7 @@ impl Args {
     pub fn from_args() -> Args {
         let args: Vec<String> = env::args().collect();
 
-        let scale: u8 = 10;
+        let mut scale: u8 = 1;
 
         if args.len() == 1 {
             panic!("You need to provide a path to the input file!");
@@ -18,6 +18,10 @@ impl Args {
 
         if args.len() == 2 {
             panic!("You need to provide a path to the output file!");
+        }
+
+        if args.len() == 4 {
+            scale = args[3].parse().unwrap();
         }
 
         let input_file_path = args[1].clone();
