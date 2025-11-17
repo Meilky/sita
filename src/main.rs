@@ -31,15 +31,7 @@ fn main() {
         .decode()
         .unwrap();
 
-    let rgb8_img = img.as_rgb8();
-
-    if rgb8_img.is_none() {
-        panic!(
-            "sry bro, can't read that image for some reason, maybe cause it has a alpha layer or some shit, idk"
-        );
-    }
-
-    let buf = rgb8_img.unwrap();
+    let buf = img.to_rgb8();
 
     let width = img.width();
     let height = img.height();
