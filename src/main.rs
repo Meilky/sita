@@ -3,6 +3,7 @@ mod input;
 mod px;
 
 use image::{ImageReader, Rgb, RgbImage};
+use std::time::{Duration, Instant};
 
 use crate::chars::{FONT_SIZE_HEIGHT, FONT_SIZE_WIDTH, FONT8X8};
 use crate::input::{Args, ColorType};
@@ -24,6 +25,8 @@ fn gradient_to_char_idx(gradient: u8) -> usize {
 }
 
 fn main() {
+    let start = Instant::now();
+
     let args = Args::from_args();
 
     let img = ImageReader::open(args.input_file_path)
@@ -57,11 +60,19 @@ fn main() {
 
     char_px.resize_with((nb_lines * nb_columns) as usize, || Px::new());
 
+    let before_average = Instant::now();
+
+    println!("Time took to start: {:?}", before_average - start);
+
     for (x, y, px) in buf.enumerate_pixels() {
         let (char_x, char_y) = get_char_x_y(scaled_font_height, scaled_font_width, x, y);
 
         char_px[char_x + (char_y * nb_columns as usize)].add_px(px.0[0], px.0[1], px.0[2]);
     }
+
+    let after_average = Instant::now();
+
+    println!("Time took to average: {:?}", after_average - before_average);
 
     let mut char_px_x: u32 = 0;
     let mut char_px_y: u32 = 0;
@@ -103,7 +114,9 @@ fn main() {
         if result > 0 {
             match args.color_type {
                 ColorType::COLOR => img.put_pixel(x, y, Rgb([c.avg_r(), c.avg_g(), c.avg_b()])),
-                ColorType::MONOCHROME => img.put_pixel(x, y, Rgb([lightness, lightness, lightness])),
+                ColorType::MONOCHROME => {
+                    img.put_pixel(x, y, Rgb([lightness, lightness, lightness]))
+                }
             };
         } else {
             img.put_pixel(x, y, Rgb([0, 0, 0]));
@@ -112,5 +125,20 @@ fn main() {
         char_px_x += 1;
     }
 
+    let after_creation = Instant::now();
+
+    println!(
+        "Time took to create image: {:?}",
+        after_creation - after_average
+    );
+
     img.save(args.output_file_path + ".png").unwrap();
+
+    let after_write = Instant::now();
+
+    println!(
+        "Time took to write image: {:?}",
+        after_write - after_creation
+    );
+    println!("Total time: {:?}", after_write - start);
 }
