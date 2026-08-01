@@ -1,144 +1,99 @@
-mod chars;
-mod input;
-mod px;
+mod ascii;
+mod cli;
+mod error;
+mod extract;
+mod font;
+mod render;
+mod source;
 
-use image::{ImageReader, Rgb, RgbImage};
-use std::time::{Duration, Instant};
+use std::fs::File;
+use std::io::{self, BufWriter, Write};
+use std::path::PathBuf;
+use std::process::ExitCode;
+use std::time::Instant;
 
-use crate::chars::{FONT_SIZE_HEIGHT, FONT_SIZE_WIDTH, FONT8X8};
-use crate::input::{Args, ColorType};
-use crate::px::Px;
+use clap::Parser;
 
-fn get_char_x_y(scaled_font_height: u32, scaled_font_width: u32, x: u32, y: u32) -> (usize, usize) {
-    let char_x: usize = (x / scaled_font_width) as usize;
-    let char_y: usize = (y / scaled_font_height) as usize;
+use crate::cli::Cli;
+use crate::error::{Error, Result};
+use crate::extract::Extractor;
+use crate::source::Source;
 
-    (char_x, char_y)
-}
+fn main() -> ExitCode {
+    match run() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("sita: {error}");
 
-fn gradient_to_char_idx(gradient: u8) -> usize {
-    let chars_idx: [usize; 10] = [0, 14, 26, 13, 29, 11, 10, 3, 5, 32];
-    let steps = chars_idx.len();
-
-    let idx = (gradient as usize * steps) / 256;
-    chars_idx[idx]
-}
-
-fn main() {
-    let start = Instant::now();
-
-    let args = Args::from_args();
-
-    let img = ImageReader::open(args.input_file_path)
-        .unwrap()
-        .decode()
-        .unwrap();
-
-    let buf = img.to_rgb8();
-
-    let width = img.width();
-    let height = img.height();
-
-    let scaled_font_height: u32 = FONT_SIZE_HEIGHT as u32 * args.scale as u32;
-    let scaled_font_width: u32 = FONT_SIZE_WIDTH as u32 * args.scale as u32;
-
-    let mut nb_columns: u32 = width / scaled_font_width;
-    let nb_columns_rest: u32 = width % scaled_font_width;
-
-    if nb_columns_rest > 0 {
-        nb_columns += 1;
-    }
-
-    let mut nb_lines: u32 = height / scaled_font_height;
-    let nb_lines_rest: u32 = height % scaled_font_height;
-
-    if nb_lines_rest > 0 {
-        nb_lines += 1;
-    }
-
-    let mut char_px: Vec<Px> = Vec::with_capacity((nb_lines * nb_columns) as usize);
-
-    char_px.resize_with((nb_lines * nb_columns) as usize, || Px::new());
-
-    let before_average = Instant::now();
-
-    println!("Time took to start: {:?}", before_average - start);
-
-    for (x, y, px) in buf.enumerate_pixels() {
-        let (char_x, char_y) = get_char_x_y(scaled_font_height, scaled_font_width, x, y);
-
-        char_px[char_x + (char_y * nb_columns as usize)].add_px(px.0[0], px.0[1], px.0[2]);
-    }
-
-    let after_average = Instant::now();
-
-    println!("Time took to average: {:?}", after_average - before_average);
-
-    let mut char_px_x: u32 = 0;
-    let mut char_px_y: u32 = 0;
-
-    let mut img = RgbImage::new(width, height);
-
-    let mut old_y: u32 = 0;
-
-    for (x, y, _px) in buf.enumerate_pixels() {
-        if char_px_x == scaled_font_width {
-            char_px_x = 0;
+            ExitCode::FAILURE
         }
+    }
+}
 
-        if old_y != y {
-            char_px_x = 0;
-            old_y = y;
-            char_px_y += 1;
+fn run() -> Result<()> {
+    let started = Instant::now();
 
-            if char_px_y == scaled_font_height {
-                char_px_y = 0;
+    let config = Cli::parse().resolve()?;
+
+    let verbose = config.verbose;
+
+    let mut step = {
+        let mut last = started;
+
+        move |label: &str| {
+            let now = Instant::now();
+
+            if verbose {
+                eprintln!("{label}: {:?}", now - last);
             }
+
+            last = now;
         }
+    };
 
-        let (char_x, char_y) = get_char_x_y(scaled_font_height, scaled_font_width, x, y);
+    let source = Source::load_png(&config.input)?;
 
-        let c = &char_px[char_x + (char_y * nb_columns as usize)];
+    step("load");
 
-        let lightness = c.get_ligthness();
+    let art = Extractor::new(config.scale, config.ramp.clone()).extract(&source);
 
-        let char = FONT8X8[gradient_to_char_idx(lightness)];
+    step("extract");
 
-        let char_px_x_descaled = (char_px_x / args.scale as u32) as u8;
-        let char_px_y_descaled = (char_px_y / args.scale as u32) as u8;
+    let (mut writer, target) = open_output(config.output.as_deref())?;
 
-        let mask: u8 = 1 << char_px_x_descaled;
+    config
+        .renderer
+        .render(&art, &mut writer)
+        .and_then(|()| writer.flush())
+        .map_err(|e| Error::io(&target, e))?;
 
-        let result: u8 = char[char_px_y_descaled as usize] & mask;
+    step("render");
 
-        if result > 0 {
-            match args.color_type {
-                ColorType::COLOR => img.put_pixel(x, y, Rgb([c.avg_r(), c.avg_g(), c.avg_b()])),
-                ColorType::MONOCHROME => {
-                    img.put_pixel(x, y, Rgb([lightness, lightness, lightness]))
-                }
-            };
-        } else {
-            img.put_pixel(x, y, Rgb([0, 0, 0]));
-        }
-
-        char_px_x += 1;
+    if config.verbose {
+        eprintln!(
+            "{}x{} -> {} columns x {} rows in {:?}",
+            source.width(),
+            source.height(),
+            art.columns(),
+            art.rows(),
+            started.elapsed()
+        );
     }
 
-    let after_creation = Instant::now();
+    Ok(())
+}
 
-    println!(
-        "Time took to create image: {:?}",
-        after_creation - after_average
-    );
+/// Opens the render target, along with a name for it to put in error messages.
+fn open_output(path: Option<&std::path::Path>) -> Result<(Box<dyn Write>, PathBuf)> {
+    match path {
+        Some(path) => {
+            let file = File::create(path).map_err(|e| Error::io(path, e))?;
 
-    img.save(args.output_file_path + ".png").unwrap();
-
-    let after_write = Instant::now();
-
-    println!(
-        "Time took to write image: {:?}",
-        after_write - after_creation
-    );
-    println!("Total time: {:?}", after_write - start);
+            Ok((Box::new(BufWriter::new(file)), path.to_path_buf()))
+        }
+        None => Ok((
+            Box::new(BufWriter::new(io::stdout().lock())),
+            PathBuf::from("<stdout>"),
+        )),
+    }
 }

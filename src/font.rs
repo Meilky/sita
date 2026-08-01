@@ -1,7 +1,18 @@
-pub const FONT_SIZE_WIDTH: u8 = 8;
-pub const FONT_SIZE_HEIGHT: u8 = 8;
+//! The 8x8 bitmap font and the lightness ramp built on top of it.
+//!
+//! A glyph is eight rows of eight bits, one row per `u8`. Bit `n` of a row is
+//! the pixel at column `n`, so the least significant bit is the *leftmost*
+//! column.
 
-pub const FONT8X8: [[u8; 8]; 95] = [
+/// Width of a glyph, in glyph pixels.
+pub const GLYPH_WIDTH: u32 = 8;
+/// Height of a glyph, in glyph pixels.
+pub const GLYPH_HEIGHT: u32 = 8;
+
+/// First character covered by [`FONT8X8`].
+const FIRST_CHAR: char = ' ';
+
+const FONT8X8: [[u8; 8]; 95] = [
     [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], // U+0020 (space)
     [0x18, 0x3C, 0x3C, 0x18, 0x18, 0x00, 0x18, 0x00], // U+0021 (!)
     [0x36, 0x36, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], // U+0022 (")
@@ -99,32 +110,104 @@ pub const FONT8X8: [[u8; 8]; 95] = [
     [0x6E, 0x3B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], // U+007E (~)
 ];
 
-pub fn print_char(char_idx: usize) {
-    let char = FONT8X8[char_idx];
+/// A single 8x8 bitmap glyph together with the character it renders.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Glyph {
+    ch: char,
+    rows: [u8; GLYPH_HEIGHT as usize],
+}
 
-    for line in char {
-        for i in 0..7 {
-            print!("{}", if (line & 1 << i) > 0 { "1" } else { "0" });
+impl Glyph {
+    /// The glyph for `ch`, or `None` if it falls outside the font's range
+    /// (printable ASCII, `U+0020`..=`U+007E`).
+    pub fn from_char(ch: char) -> Option<Glyph> {
+        let idx = (ch as usize).checked_sub(FIRST_CHAR as usize)?;
+
+        FONT8X8.get(idx).map(|rows| Glyph { ch, rows: *rows })
+    }
+
+    /// The character this glyph renders.
+    pub fn char(&self) -> char {
+        self.ch
+    }
+
+    /// The bits of row `y`, least significant bit first (leftmost column).
+    pub fn row(&self, y: u32) -> u8 {
+        self.rows[y as usize]
+    }
+
+    /// Whether the glyph pixel at (`x`, `y`) is set.
+    pub fn is_set(&self, x: u32, y: u32) -> bool {
+        x < GLYPH_WIDTH && y < GLYPH_HEIGHT && self.rows[y as usize] & (1 << x) != 0
+    }
+
+    /// The horizontal runs of set pixels in row `y`, as `(start, length)`
+    /// pairs. Renderers that draw shapes rather than pixels use this to emit
+    /// one shape per run instead of one per pixel.
+    pub fn row_runs(&self, y: u32) -> Vec<(u32, u32)> {
+        let row = self.rows[y as usize];
+        let mut runs = Vec::new();
+        let mut x = 0;
+
+        while x < GLYPH_WIDTH {
+            if row & (1 << x) == 0 {
+                x += 1;
+                continue;
+            }
+
+            let start = x;
+
+            while x < GLYPH_WIDTH && row & (1 << x) != 0 {
+                x += 1;
+            }
+
+            runs.push((start, x - start));
         }
 
-        println!("{}", if (line & 1 << 7) > 0 { "1" } else { "0" });
+        runs
     }
 }
 
-pub fn has_px_at(x: u32, y: u32, scale: u8, char_idx: usize) -> bool {
-    let char = FONT8X8[char_idx];
+/// An ordered set of glyphs, from darkest to brightest, used to map a
+/// lightness value onto a character.
+#[derive(Clone, Debug)]
+pub struct Ramp {
+    glyphs: Vec<Glyph>,
+}
 
-    let char_px_x = x % (FONT_SIZE_WIDTH as u32 * scale as u32);
-    let char_px_y = y % (FONT_SIZE_HEIGHT as u32 * scale as u32);
+impl Ramp {
+    /// The ramp used when none is given on the command line.
+    pub const DEFAULT: &'static str = " .:-=+*#%@";
 
-    let char_px_x_descaled = (char_px_x / scale as u32) as u8;
-    let char_px_y_descaled = (char_px_y / scale as u32) as u8;
+    /// Builds a ramp from `chars`, ordered darkest first. Returns the offending
+    /// character if one of them is not in the font, and `None` if `chars` is
+    /// empty.
+    pub fn new(chars: &str) -> Result<Ramp, Option<char>> {
+        let glyphs = chars
+            .chars()
+            .map(|ch| Glyph::from_char(ch).ok_or(Some(ch)))
+            .collect::<Result<Vec<_>, _>>()?;
 
-    let mask: u8 = 1 << char_px_x_descaled;
+        if glyphs.is_empty() {
+            return Err(None);
+        }
 
-    let result: u8 = char[char_px_y_descaled as usize] & mask;
+        Ok(Ramp { glyphs })
+    }
 
-    result > 0
+    /// Reverses the ramp, so bright areas get the dense glyphs. Useful for
+    /// rendering on a light background.
+    pub fn inverted(mut self) -> Ramp {
+        self.glyphs.reverse();
+        self
+    }
+
+    /// The glyph standing in for `lightness`.
+    pub fn glyph_for(&self, lightness: u8) -> Glyph {
+        let idx = (lightness as usize * self.glyphs.len()) / 256;
+
+        self.glyphs[idx]
+    }
 }
 
 #[cfg(test)]
@@ -132,60 +215,56 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_works_at_scale_1_for_plus_sign_middle_line() {
-        let px_0_3 = has_px_at(16, 3, 1, 11);
-        let px_1_3 = has_px_at(17, 3, 1, 11);
-        let px_2_3 = has_px_at(18, 3, 1, 11);
-        let px_3_3 = has_px_at(19, 3, 1, 11);
-        let px_4_3 = has_px_at(20, 3, 1, 11);
-        let px_5_3 = has_px_at(21, 3, 1, 11);
-        let px_6_3 = has_px_at(22, 3, 1, 11);
-        let px_7_3 = has_px_at(23, 3, 1, 11);
+    fn plus_sign_middle_row_is_six_pixels_wide() {
+        let plus = Glyph::from_char('+').unwrap();
 
-        assert_eq!(px_0_3, true);
-        assert_eq!(px_1_3, true);
-        assert_eq!(px_2_3, true);
-        assert_eq!(px_3_3, true);
-        assert_eq!(px_4_3, true);
-        assert_eq!(px_5_3, true);
-        assert_eq!(px_6_3, false);
-        assert_eq!(px_7_3, false);
+        let row: Vec<bool> = (0..GLYPH_WIDTH).map(|x| plus.is_set(x, 3)).collect();
+
+        assert_eq!(row, vec![true, true, true, true, true, true, false, false]);
     }
 
     #[test]
-    fn it_works_at_scale_2_for_plus_sign_middle_line() {
-        let px_0_6 = has_px_at(16, 6, 2, 11);
-        let px_1_6 = has_px_at(17, 6, 2, 11);
-        let px_2_6 = has_px_at(18, 6, 2, 11);
-        let px_3_6 = has_px_at(19, 6, 2, 11);
-        let px_4_6 = has_px_at(20, 6, 2, 11);
-        let px_5_6 = has_px_at(21, 6, 2, 11);
-        let px_6_6 = has_px_at(22, 6, 2, 11);
-        let px_7_6 = has_px_at(23, 6, 2, 11);
-        let px_8_6 = has_px_at(24, 6, 2, 11);
-        let px_9_6 = has_px_at(25, 6, 2, 11);
-        let px_10_6 = has_px_at(26, 6, 2, 11);
-        let px_11_6 = has_px_at(27, 6, 2, 11);
-        let px_12_6 = has_px_at(28, 6, 2, 11);
-        let px_13_6 = has_px_at(29, 6, 2, 11);
-        let px_14_6 = has_px_at(30, 6, 2, 11);
-        let px_15_6 = has_px_at(31, 6, 2, 11);
+    fn row_runs_merges_adjacent_pixels() {
+        let plus = Glyph::from_char('+').unwrap();
 
-        assert_eq!(px_0_6, true);
-        assert_eq!(px_1_6, true);
-        assert_eq!(px_2_6, true);
-        assert_eq!(px_3_6, true);
-        assert_eq!(px_4_6, true);
-        assert_eq!(px_5_6, true);
-        assert_eq!(px_6_6, true);
-        assert_eq!(px_7_6, true);
-        assert_eq!(px_8_6, true);
-        assert_eq!(px_9_6, true);
-        assert_eq!(px_10_6, true);
-        assert_eq!(px_11_6, true);
-        assert_eq!(px_12_6, false);
-        assert_eq!(px_13_6, false);
-        assert_eq!(px_14_6, false);
-        assert_eq!(px_15_6, false);
+        assert_eq!(plus.row_runs(3), vec![(0, 6)]);
+        assert_eq!(plus.row_runs(2), vec![(2, 2)]);
+        assert_eq!(plus.row_runs(0), vec![]);
+    }
+
+    #[test]
+    fn row_runs_handles_gaps_and_the_last_column() {
+        // U+0025 (%) row 1 is 0x63 == 0b01100011.
+        let percent = Glyph::from_char('%').unwrap();
+
+        assert_eq!(percent.row_runs(1), vec![(0, 2), (5, 2)]);
+
+        // U+005F (_) row 7 is 0xFF, so the run must reach the last column.
+        let underscore = Glyph::from_char('_').unwrap();
+
+        assert_eq!(underscore.row_runs(7), vec![(0, 8)]);
+    }
+
+    #[test]
+    fn font_covers_printable_ascii_only() {
+        assert_eq!(Glyph::from_char(' ').unwrap().char(), ' ');
+        assert_eq!(Glyph::from_char('~').unwrap().char(), '~');
+        assert!(Glyph::from_char('\u{1F600}').is_none());
+        assert!(Glyph::from_char('\n').is_none());
+    }
+
+    #[test]
+    fn ramp_spans_the_whole_lightness_range() {
+        let ramp = Ramp::new(Ramp::DEFAULT).unwrap();
+
+        assert_eq!(ramp.glyph_for(0).char(), ' ');
+        assert_eq!(ramp.glyph_for(255).char(), '@');
+        assert_eq!(ramp.inverted().glyph_for(0).char(), '@');
+    }
+
+    #[test]
+    fn ramp_rejects_unrenderable_and_empty_input() {
+        assert_eq!(Ramp::new(" .é").unwrap_err(), Some('é'));
+        assert_eq!(Ramp::new("").unwrap_err(), None);
     }
 }
